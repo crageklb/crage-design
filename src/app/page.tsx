@@ -1,48 +1,22 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
-import {
-  motion,
-  useMotionValue,
-  useMotionTemplate,
-  useSpring,
-  useAnimationFrame,
-} from 'framer-motion'
+import { useEffect } from 'react'
+import { motion, useMotionValue, useSpring } from 'framer-motion'
 import dynamic from 'next/dynamic'
+import { useTheme } from '@/components/ThemeProvider'
 
 const Background = dynamic(
   () => import('@/components/Visuals/Background'),
   { ssr: false },
 )
 
-interface Wave {
-  x: number
-  y: number
-  time: number
-}
-
 export default function Home() {
-  const [light, setLight] = useState(false)
+  const { light, setLight } = useTheme()
 
   const x = useMotionValue(0)
   const y = useMotionValue(0)
-  const blur = useMotionValue(0)
   const springX = useSpring(x, { stiffness: 200, damping: 25 })
   const springY = useSpring(y, { stiffness: 200, damping: 25 })
-  const springBlur = useSpring(blur, { stiffness: 300, damping: 20 })
-  const filterStyle = useMotionTemplate`blur(${springBlur}px)`
-
-  const waves = useCallback(() => [] as Wave[], [])()
-  const startTime = useCallback(() => performance.now(), [])()
-
-  const onClickWave = useCallback((e: MouseEvent) => {
-    waves.push({
-      x: e.clientX,
-      y: e.clientY,
-      time: (performance.now() - startTime) / 1000,
-    })
-    if (waves.length > 16) waves.shift()
-  }, [waves, startTime])
 
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
@@ -59,32 +33,8 @@ export default function Home() {
       y.set((dy / len) * strength * falloff)
     }
     window.addEventListener('mousemove', onMove)
-    window.addEventListener('click', onClickWave)
-    return () => {
-      window.removeEventListener('mousemove', onMove)
-      window.removeEventListener('click', onClickWave)
-    }
-  }, [x, y, onClickWave])
-
-  useAnimationFrame(() => {
-    const now = (performance.now() - startTime) / 1000
-    let maxBlur = 0
-    for (const w of waves) {
-      const age = now - w.time
-      if (age > 3.5) continue
-      const cx = window.innerWidth / 2
-      const cy = window.innerHeight / 2
-      const dx = cx - w.x
-      const dy = cy - w.y
-      const distNorm = Math.sqrt(dx * dx + dy * dy) / Math.max(window.innerWidth, window.innerHeight)
-      const waveRadius = age * 0.5
-      const waveWidth = 0.06 + age * 0.025
-      const proximity = Math.exp(-Math.pow((distNorm - waveRadius) / waveWidth, 2))
-      const decay = Math.exp(-age * 1.2)
-      maxBlur = Math.max(maxBlur, proximity * decay)
-    }
-    blur.set(maxBlur * 6)
-  })
+    return () => window.removeEventListener('mousemove', onMove)
+  }, [x, y])
 
   return (
     <main
@@ -128,18 +78,37 @@ export default function Home() {
 
       <div className="pointer-events-none relative z-10 flex h-full items-center justify-center">
         <motion.h1
-          className="select-none text-xl font-medium tracking-normal transition-colors duration-500"
+          className="flex select-none flex-col items-center gap-1 text-2xl font-medium tracking-normal transition-colors duration-500 md:flex-row md:gap-3 md:text-xl"
           style={{
             x: springX,
             y: springY,
-            filter: filterStyle,
             color: light ? '#000' : '#fff',
           }}
-          initial={{ opacity: 0, filter: 'blur(10px)' }}
-          animate={{ opacity: 1, filter: 'blur(0px)' }}
-          transition={{ type: 'spring', duration: 1.8, bounce: 0 }}
         >
-          Craig Betts &nbsp; • &nbsp; Design @ Shopify
+          <span>
+            {'Craig Betts'.split('').map((char, i) => (
+              <motion.span
+                key={`craig-${i}`}
+                initial={{ opacity: 0, filter: 'blur(10px)' }}
+                animate={{ opacity: 1, filter: 'blur(0px)' }}
+                transition={{ type: 'spring', duration: 1.2, bounce: 0, delay: i * 0.04 }}
+              >
+                {char}
+              </motion.span>
+            ))}
+          </span>
+          <span>
+            {'Design @ Shopify'.split('').map((char, i) => (
+              <motion.span
+                key={`design-${i}`}
+                initial={{ opacity: 0, filter: 'blur(10px)' }}
+                animate={{ opacity: 0.75, filter: 'blur(0px)' }}
+                transition={{ type: 'spring', duration: 1.2, bounce: 0, delay: 0.5 + i * 0.04 }}
+              >
+                {char}
+              </motion.span>
+            ))}
+          </span>
         </motion.h1>
       </div>
     </main>

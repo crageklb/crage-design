@@ -7,6 +7,7 @@ import { DotGridMaterial, TRAIL_LEN } from './DotMaterial'
 
 const MAX_WAVES = 16
 const TRAIL_INTERVAL = 0.03
+const MOBILE_BREAKPOINT = 768
 
 function DotGrid({ theme }: { theme: number }) {
   const { viewport, size } = useThree()
@@ -15,8 +16,35 @@ function DotGrid({ theme }: { theme: number }) {
   const trailIndex = useRef(0)
   const lastTrailTime = useRef(0)
   const lastTrailPos = useRef(new THREE.Vector2(-1, -1))
+  const smoothSpeed = useRef(0)
   const material = useMemo(() => new DotGridMaterial(), [])
   const hasInit = useRef(false)
+  const touchCount = useRef(0)
+  const touchActive = useRef(false)
+  const isMobile = size.width < MOBILE_BREAKPOINT
+
+  useEffect(() => {
+    const onPointerDown = (e: PointerEvent) => {
+      if (e.pointerType === 'touch') {
+        touchCount.current++
+        touchActive.current = true
+      }
+    }
+    const onPointerUp = (e: PointerEvent) => {
+      if (e.pointerType === 'touch') {
+        touchCount.current = Math.max(0, touchCount.current - 1)
+        touchActive.current = touchCount.current > 0
+      }
+    }
+    window.addEventListener('pointerdown', onPointerDown)
+    window.addEventListener('pointerup', onPointerUp)
+    window.addEventListener('pointercancel', onPointerUp)
+    return () => {
+      window.removeEventListener('pointerdown', onPointerDown)
+      window.removeEventListener('pointerup', onPointerUp)
+      window.removeEventListener('pointercancel', onPointerUp)
+    }
+  }, [])
 
   useEffect(() => {
     const onMove = (e: PointerEvent) => {
@@ -51,6 +79,9 @@ function DotGrid({ theme }: { theme: number }) {
 
     u.uTime.value = t
     u.uTheme.value = theme
+    const fade = 1.0 - Math.min(1, Math.max(0, (t - 1.0) / 0.5))
+    const initialFade = t < 1.5 ? fade : 0
+    u.uTouchActive.value = isMobile ? Math.max(touchActive.current ? 1 : 0, initialFade) : 1
     u.uResolution.value.set(size.width, size.height)
     u.uMouse.value.copy(mouse.current)
 
@@ -62,7 +93,14 @@ function DotGrid({ theme }: { theme: number }) {
       hasInit.current = true
     }
 
-    const moved = mouse.current.distanceTo(lastTrailPos.current) > 0.003
+    const dist = mouse.current.distanceTo(lastTrailPos.current)
+    const moved = dist > 0.003
+    const dt = Math.max(t - lastTrailTime.current, 0.001)
+    const rawSpeed = moved ? dist / dt : 0
+    smoothSpeed.current += (rawSpeed - smoothSpeed.current) * 0.05
+    smoothSpeed.current *= 0.90
+    u.uSpeed.value = smoothSpeed.current
+
     if (moved && t - lastTrailTime.current > TRAIL_INTERVAL) {
       const i = trailIndex.current % TRAIL_LEN
       u.uTrail.value[i].copy(mouse.current)

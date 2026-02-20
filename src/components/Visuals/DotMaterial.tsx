@@ -16,6 +16,8 @@ const fragmentShader = /* glsl */ `
 
   uniform float uTime;
   uniform float uTheme;
+  uniform float uTouchActive;
+  uniform float uSpeed;
   uniform vec2 uMouse;
   uniform vec2 uResolution;
 
@@ -48,10 +50,11 @@ const fragmentShader = /* glsl */ `
 
     vec2 cellWorld = (id + 0.5) / density;
 
-    // Radial cursor displacement
+    // Radial cursor displacement — radius and glow scale with speed
     vec2 delta = cellWorld - mScaled;
     float dist = length(delta);
-    float influence = 0.3;
+    float speedInflation = min(uSpeed * 0.8, 1.0);
+    float influence = 0.3 + speedInflation * 0.32;
     float strength = 0.4;
     float falloff = smoothstep(influence, 0.0, dist);
     vec2 offset = normalize(delta + 0.0001) * falloff * strength;
@@ -91,29 +94,29 @@ const fragmentShader = /* glsl */ `
       float waveRadius = age * waveSpeed;
       float waveWidth = 0.06 + age * 0.025;
       float waveFront = exp(-pow((sDist - waveRadius) / waveWidth, 2.0));
-      float decay = exp(-age * 1.2);
+      float decay = exp(-age * 0.8);
       float waveStrength = waveFront * decay;
 
       vec2 sDir = normalize(cellWorld - origin + 0.0001);
-      offset += sDir * waveStrength * 0.4;
+      offset += sDir * waveStrength * 0.45;
       shockColor += waveStrength;
     }
 
     offset = clamp(offset, vec2(-0.38), vec2(0.38));
     float d = length(cell - offset);
 
-    float mInfl = smoothstep(0.24, 0.0, dist);
+    float mInfl = smoothstep(0.24 + speedInflation * 0.26, 0.0, dist);
     float baseRadius = 0.032 + mInfl * 0.04;
     float soft = 0.024;
     float dotMask = smoothstep(baseRadius + soft, baseRadius - soft, d);
 
-    // In light mode, fade dot visibility based on cursor/trail proximity
-    float visibility = mix(1.0, mInfl + trailGlow * 0.8 + shockColor * 0.6, uTheme);
+    // In light mode, fade dot visibility based on cursor/trail/shock proximity
+    float visibility = mix(1.0, mInfl + trailGlow * 0.8 + shockColor * 1.0, uTheme);
     visibility = clamp(visibility, 0.0, 1.0);
     float visMask = dotMask * visibility;
 
     // Theme-aware colors
-    float bright = 0.10 + mInfl * 0.50 + trailGlow * 0.35;
+    float bright = 0.10 + mInfl * (0.50 + speedInflation * 0.4) + trailGlow * 0.35;
 
     vec3 bg = mix(vec3(0.0), vec3(1.0), uTheme);
     vec3 dotBase = mix(vec3(1.0), vec3(0.25), uTheme);
@@ -130,20 +133,27 @@ const fragmentShader = /* glsl */ `
     col += trailTint * trailGlow * visMask * 2.0;
 
     // Shockwave color pulse
-    vec3 shockTint = mix(vec3(0.6, 0.3, 0.15), vec3(0.15, 0.3, 0.6), uTheme);
-    col += shockTint * shockColor * visMask * 2.2;
+    // Dark mode: peak blows out to white. Light mode: peak crushes to black.
+    float shockIntensity = shockColor * dotMask;
+    vec3 darkEffect = mix(vec3(0.9, 0.5, 0.2), vec3(1.0), min(shockIntensity, 1.0)) * shockIntensity * 6.0;
+    col += darkEffect * (1.0 - uTheme);
+    col -= vec3(shockIntensity * 6.0) * uTheme;
 
-    // Soft radial gradient peeking from bottom
-    vec2 gradientCenter = vec2(0.5, -0.25);
+    // Analog film grain
+    float grain = (hash21(uv * 1200.0 + uTime * 4.0) - 0.5) * 0.012;
+
+    col = mix(bg, col, uTouchActive);
+
+    // Soft radial gradient peeking from bottom — slides up on load
+    float gradAnim = smoothstep(0.0, 1.2, uTime);
+    float centerY = mix(-1.4, -0.25, gradAnim);
+    vec2 gradientCenter = vec2(0.5, centerY);
     float r = length(uv - gradientCenter);
-    float gradient = smoothstep(0.85, 0.2, r) * smoothstep(0.5, 0.0, uv.y);
+    float gradient = smoothstep(0.85, 0.2, r) * smoothstep(0.5, 0.0, uv.y) * gradAnim;
     vec3 darkGrad = vec3(0.14, 0.07, 0.04) * gradient;
     vec3 lightGrad = vec3(0.07, 0.04, 0.0) * gradient;
     col += darkGrad * (1.0 - uTheme);
     col -= lightGrad * uTheme;
-
-    // Analog film grain
-    float grain = (hash21(uv * 1200.0 + uTime * 4.0) - 0.5) * 0.012;
 
     gl_FragColor = vec4(col + grain, 1.0);
   }
@@ -153,6 +163,8 @@ const DotGridMaterial = shaderMaterial(
   {
     uTime: 0,
     uTheme: 0,
+    uTouchActive: 1,
+    uSpeed: 0,
     uMouse: new THREE.Vector2(0.5, 0.5),
     uResolution: new THREE.Vector2(1, 1),
     uTrail: Array.from({ length: TRAIL_LEN }, () => new THREE.Vector2(0, 0)),

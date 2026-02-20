@@ -1,5 +1,7 @@
 import type { Metadata } from 'next'
+import { cookies } from 'next/headers'
 import { Geist, Geist_Mono } from 'next/font/google'
+import { ThemeProvider } from '@/components/ThemeProvider'
 import './globals.css'
 
 const geistSans = Geist({
@@ -17,17 +19,22 @@ export const metadata: Metadata = {
   description: 'Portfolio of Craig Betts',
 }
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode
 }>) {
+  const cookieStore = await cookies()
+  const theme = (cookieStore.get('crage-theme')?.value as 'dark' | 'light') ?? 'dark'
+
   return (
     <html lang="en">
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        {children}
+        <ThemeProvider initialTheme={theme}>
+          {children}
+        </ThemeProvider>
       </body>
     </html>
   )
