@@ -17,6 +17,9 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: 'CRAGE — Design',
   description: 'Portfolio of Craig Betts',
+  icons: {
+    icon: '/favicon.svg',
+  },
 }
 
 export default async function RootLayout({

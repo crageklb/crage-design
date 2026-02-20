@@ -24,6 +24,7 @@ const fragmentShader = /* glsl */ `
   #define TRAIL_LEN 32
   uniform vec2 uTrail[TRAIL_LEN];
   uniform float uTrailTimes[TRAIL_LEN];
+  uniform float uTrailHead;
 
   #define MAX_WAVES 16
   uniform vec2 uShockOrigins[MAX_WAVES];
@@ -56,11 +57,15 @@ const fragmentShader = /* glsl */ `
     float speedInflation = min(uSpeed * 0.8, 1.0);
     float influence = 0.3 + speedInflation * 0.32;
     float strength = 0.4;
-    float falloff = smoothstep(influence, 0.0, dist);
+    float t = clamp(dist / influence, 0.0, 1.0);
+    float falloff = 0.5 + 0.5 * cos(t * 3.14159265);
     vec2 offset = normalize(delta + 0.0001) * falloff * strength;
 
-    // Fluid trail: displacement + illumination
+    // Fluid trail: displacement + illumination (continuous segments, not just circles)
     float trailGlow = 0.0;
+    float radius = 0.08;
+    float glowRadius = 0.12;
+
     for (int i = 0; i < TRAIL_LEN; i++) {
       float age = uTime - uTrailTimes[i];
       if (uTrailTimes[i] <= 0.0 || age > 1.8) continue;
@@ -69,15 +74,38 @@ const fragmentShader = /* glsl */ `
       vec2 tDelta = cellWorld - tPos;
       float tDist = length(tDelta);
 
-      float radius = 0.08;
-      float tFall = smoothstep(radius, 0.0, tDist);
       float tDecay = exp(-age * 2.5);
 
+      // Point contribution (circle at sample)
+      float tFall = smoothstep(radius, 0.0, tDist);
       offset += normalize(tDelta + 0.0001) * tFall * tDecay * 0.32;
 
-      float glowRadius = 0.12;
       float gFall = smoothstep(glowRadius, 0.0, tDist);
       trailGlow += gFall * tDecay;
+
+      // Segment: bridge to next point in path (older = i-1, wrap). Skip wrap from oldest→newest.
+      int head = int(uTrailHead);
+      int prev = i == 0 ? TRAIL_LEN - 1 : i - 1;
+      bool isOldest = (head + 1) % TRAIL_LEN == i;
+      if (!isOldest) {
+        float nextAge = uTime - uTrailTimes[prev];
+        if (uTrailTimes[prev] > 0.0 && nextAge <= 1.8 && nextAge >= 0.0) {
+          vec2 tNext = vec2(uTrail[prev].x * aspect, uTrail[prev].y);
+          vec2 seg = tNext - tPos;
+          float segLen = length(seg) + 0.0001;
+
+          float t = clamp(dot(cellWorld - tPos, seg) / (segLen * segLen), 0.0, 1.0);
+          vec2 closest = tPos + t * seg;
+          float segDist = length(cellWorld - closest);
+
+          float segDecay = exp(-mix(age, nextAge, t) * 2.5);
+          float segFall = smoothstep(radius, 0.0, segDist);
+          offset += normalize(cellWorld - closest + 0.0001) * segFall * segDecay * 0.32;
+
+          float segGlow = smoothstep(glowRadius, 0.0, segDist);
+          trailGlow += segGlow * segDecay;
+        }
+      }
     }
     trailGlow = min(trailGlow, 1.0);
 
@@ -128,9 +156,11 @@ const fragmentShader = /* glsl */ `
 
     vec3 col = mix(bg, litDot, visMask);
 
-    // Trail illumination
-    vec3 trailTint = mix(vec3(0.5, 0.25, 0.12), vec3(0.1, 0.2, 0.45), uTheme);
-    col += trailTint * trailGlow * visMask * 2.0;
+    // Trail illumination — bright but fades with trail decay
+    vec3 trailTintDark = vec3(0.85, 0.5, 0.25) * trailGlow * visMask * 5.0;
+    vec3 trailTintLight = vec3(0.15, 0.35, 0.7) * trailGlow * visMask * 3.0;
+    col += trailTintDark * (1.0 - uTheme);
+    col -= trailTintLight * uTheme;
 
     // Shockwave color pulse
     // Dark mode: peak blows out to white. Light mode: peak crushes to black.
@@ -169,6 +199,7 @@ const DotGridMaterial = shaderMaterial(
     uResolution: new THREE.Vector2(1, 1),
     uTrail: Array.from({ length: TRAIL_LEN }, () => new THREE.Vector2(0, 0)),
     uTrailTimes: new Float32Array(TRAIL_LEN).fill(-10),
+    uTrailHead: 0,
     uShockOrigins: Array.from({ length: 16 }, () => new THREE.Vector2(0, 0)),
     uShockTimes: new Float32Array(16).fill(-10),
   },

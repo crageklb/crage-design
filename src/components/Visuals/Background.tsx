@@ -7,6 +7,7 @@ import { DotGridMaterial, TRAIL_LEN } from './DotMaterial'
 
 const MAX_WAVES = 16
 const TRAIL_INTERVAL = 0.03
+const TRAIL_MIN_DIST = 0.015
 const MOBILE_BREAKPOINT = 768
 
 function DotGrid({ theme }: { theme: number }) {
@@ -101,10 +102,13 @@ function DotGrid({ theme }: { theme: number }) {
     smoothSpeed.current *= 0.90
     u.uSpeed.value = smoothSpeed.current
 
-    if (moved && t - lastTrailTime.current > TRAIL_INTERVAL) {
+    const timeOk = t - lastTrailTime.current > TRAIL_INTERVAL
+    const distOk = dist > TRAIL_MIN_DIST
+    if (moved && (timeOk || distOk)) {
       const i = trailIndex.current % TRAIL_LEN
       u.uTrail.value[i].copy(mouse.current)
       u.uTrailTimes.value[i] = t
+      u.uTrailHead.value = i
       trailIndex.current++
       lastTrailTime.current = t
       lastTrailPos.current.copy(mouse.current)
