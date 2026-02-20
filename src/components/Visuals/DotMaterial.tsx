@@ -54,7 +54,7 @@ const fragmentShader = /* glsl */ `
     // Radial cursor displacement — radius and glow scale with speed
     vec2 delta = cellWorld - mScaled;
     float dist = length(delta);
-    float speedInflation = min(uSpeed * 0.8, 1.0);
+    float speedInflation = min(pow(uSpeed / 2.2, 1.4), 1.0);
     float influence = 0.3 + speedInflation * 0.32;
     float strength = 0.4;
     float t = clamp(dist / influence, 0.0, 1.0);
@@ -75,12 +75,15 @@ const fragmentShader = /* glsl */ `
       float tDist = length(tDelta);
 
       float tDecay = exp(-age * 2.5);
+      float radiusScale = 1.0 - age / 1.8;
+      float tRadius = radius * radiusScale;
+      float tGlowRadius = glowRadius * radiusScale;
 
       // Point contribution (circle at sample)
-      float tFall = smoothstep(radius, 0.0, tDist);
+      float tFall = smoothstep(tRadius, 0.0, tDist);
       offset += normalize(tDelta + 0.0001) * tFall * tDecay * 0.32;
 
-      float gFall = smoothstep(glowRadius, 0.0, tDist);
+      float gFall = smoothstep(tGlowRadius, 0.0, tDist);
       trailGlow += gFall * tDecay;
 
       // Segment: bridge to next point in path (older = i-1, wrap). Skip wrap from oldest→newest.
@@ -98,11 +101,16 @@ const fragmentShader = /* glsl */ `
           vec2 closest = tPos + t * seg;
           float segDist = length(cellWorld - closest);
 
-          float segDecay = exp(-mix(age, nextAge, t) * 2.5);
-          float segFall = smoothstep(radius, 0.0, segDist);
+          float segAge = mix(age, nextAge, t);
+          float segDecay = exp(-segAge * 2.5);
+          float segRadiusScale = 1.0 - segAge / 1.8;
+          float segRadius = radius * segRadiusScale;
+          float segGlowRadius = glowRadius * segRadiusScale;
+
+          float segFall = smoothstep(segRadius, 0.0, segDist);
           offset += normalize(cellWorld - closest + 0.0001) * segFall * segDecay * 0.32;
 
-          float segGlow = smoothstep(glowRadius, 0.0, segDist);
+          float segGlow = smoothstep(segGlowRadius, 0.0, segDist);
           trailGlow += segGlow * segDecay;
         }
       }
@@ -144,7 +152,7 @@ const fragmentShader = /* glsl */ `
     float visMask = dotMask * visibility;
 
     // Theme-aware colors
-    float bright = 0.10 + mInfl * (0.50 + speedInflation * 0.4) + trailGlow * 0.35;
+    float bright = 0.10 + mInfl * (0.22 + speedInflation * 0.04) + trailGlow * 0.20;
 
     vec3 bg = mix(vec3(0.0), vec3(1.0), uTheme);
     vec3 dotBase = mix(vec3(1.0), vec3(0.25), uTheme);
@@ -157,8 +165,8 @@ const fragmentShader = /* glsl */ `
     vec3 col = mix(bg, litDot, visMask);
 
     // Trail illumination — bright but fades with trail decay
-    vec3 trailTintDark = vec3(0.85, 0.5, 0.25) * trailGlow * visMask * 5.0;
-    vec3 trailTintLight = vec3(0.15, 0.35, 0.7) * trailGlow * visMask * 3.0;
+    vec3 trailTintDark = vec3(0.85, 0.5, 0.25) * trailGlow * visMask * 2.2;
+    vec3 trailTintLight = vec3(0.15, 0.35, 0.7) * trailGlow * visMask * 1.2;
     col += trailTintDark * (1.0 - uTheme);
     col -= trailTintLight * uTheme;
 

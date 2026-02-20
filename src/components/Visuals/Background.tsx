@@ -17,6 +17,8 @@ function DotGrid({ theme }: { theme: number }) {
   const trailIndex = useRef(0)
   const lastTrailTime = useRef(0)
   const lastTrailPos = useRef(new THREE.Vector2(-1, -1))
+  const prevMouse = useRef(new THREE.Vector2(0.5, 0.5))
+  const prevTime = useRef(0)
   const smoothSpeed = useRef(0)
   const material = useMemo(() => new DotGridMaterial(), [])
   const hasInit = useRef(false)
@@ -94,13 +96,19 @@ function DotGrid({ theme }: { theme: number }) {
       hasInit.current = true
     }
 
+    const frameDist = mouse.current.distanceTo(prevMouse.current)
+    const frameDt = Math.max(t - prevTime.current, 0.001)
+    const rawSpeed = frameDist / frameDt
+    prevMouse.current.copy(mouse.current)
+    prevTime.current = t
+
+    const rampUp = rawSpeed > smoothSpeed.current ? 0.006 : 0.08
+    smoothSpeed.current += (rawSpeed - smoothSpeed.current) * rampUp
+    smoothSpeed.current *= 0.98
+    u.uSpeed.value = smoothSpeed.current
+
     const dist = mouse.current.distanceTo(lastTrailPos.current)
     const moved = dist > 0.003
-    const dt = Math.max(t - lastTrailTime.current, 0.001)
-    const rawSpeed = moved ? dist / dt : 0
-    smoothSpeed.current += (rawSpeed - smoothSpeed.current) * 0.05
-    smoothSpeed.current *= 0.90
-    u.uSpeed.value = smoothSpeed.current
 
     const timeOk = t - lastTrailTime.current > TRAIL_INTERVAL
     const distOk = dist > TRAIL_MIN_DIST
