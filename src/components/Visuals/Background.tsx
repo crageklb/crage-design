@@ -3,15 +3,20 @@
 import { useRef, useEffect, useMemo } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
-import { DotGridMaterial } from './DotMaterial'
+import { DotGridMaterial, TRAIL_LEN } from './DotMaterial'
 
-const MAX_WAVES = 8
+const MAX_WAVES = 16
+const TRAIL_INTERVAL = 0.03
 
-function DotGrid() {
+function DotGrid({ theme }: { theme: number }) {
   const { viewport, size } = useThree()
   const mouse = useRef(new THREE.Vector2(0.5, 0.5))
   const waveIndex = useRef(0)
+  const trailIndex = useRef(0)
+  const lastTrailTime = useRef(0)
+  const lastTrailPos = useRef(new THREE.Vector2(-1, -1))
   const material = useMemo(() => new DotGridMaterial(), [])
+  const hasInit = useRef(false)
 
   useEffect(() => {
     const onMove = (e: PointerEvent) => {
@@ -42,9 +47,30 @@ function DotGrid() {
 
   useFrame(({ clock }) => {
     const u = material.uniforms as Record<string, THREE.IUniform>
-    u.uTime.value = clock.elapsedTime
+    const t = clock.elapsedTime
+
+    u.uTime.value = t
+    u.uTheme.value = theme
     u.uResolution.value.set(size.width, size.height)
     u.uMouse.value.copy(mouse.current)
+
+    if (!hasInit.current && t > 0.3) {
+      const i = waveIndex.current % MAX_WAVES
+      u.uShockOrigins.value[i].set(0.5, 0.5)
+      u.uShockTimes.value[i] = t
+      waveIndex.current++
+      hasInit.current = true
+    }
+
+    const moved = mouse.current.distanceTo(lastTrailPos.current) > 0.003
+    if (moved && t - lastTrailTime.current > TRAIL_INTERVAL) {
+      const i = trailIndex.current % TRAIL_LEN
+      u.uTrail.value[i].copy(mouse.current)
+      u.uTrailTimes.value[i] = t
+      trailIndex.current++
+      lastTrailTime.current = t
+      lastTrailPos.current.copy(mouse.current)
+    }
   })
 
   return (
@@ -55,7 +81,7 @@ function DotGrid() {
   )
 }
 
-export default function Background() {
+export default function Background({ theme = 0 }: { theme?: number }) {
   return (
     <div className="fixed inset-0 z-0" aria-hidden="true">
       <Canvas
@@ -63,7 +89,7 @@ export default function Background() {
         dpr={[1, 1.5]}
         camera={{ position: [0, 0, 1] }}
       >
-        <DotGrid />
+        <DotGrid theme={theme} />
       </Canvas>
     </div>
   )
