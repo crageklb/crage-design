@@ -107,7 +107,7 @@ function DotGrid({
     u.uPillHovered.value = pillHovered ? 1 : 0
     u.uPillCenter.value.set(
       0.5 + springX.get() / size.width,
-      0.47 - springY.get() / size.height,
+      0.435 - springY.get() / size.height,
     )
 
     if (!hasInit.current && t > 0.3) {

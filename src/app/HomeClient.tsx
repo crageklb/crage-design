@@ -4,6 +4,7 @@ import { useEffect, useLayoutEffect, useState, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, useMotionValue, useSpring, AnimatePresence } from 'framer-motion'
 import dynamic from 'next/dynamic'
+import Image from 'next/image'
 import { useTheme } from '@/components/ThemeProvider'
 import { validatePassword, clearAuthCookie } from './actions'
 
@@ -12,7 +13,8 @@ const Background = dynamic(
   { ssr: false },
 )
 
-const PASSWORD_ANIMATION_END = 3.5
+const INTRO_INITIAL_DELAY = 1
+const PASSWORD_ANIMATION_END = 3.5 + INTRO_INITIAL_DELAY
 
 export default function HomeClient({ initialAuthenticated }: { initialAuthenticated: boolean }) {
   const { light, setLight } = useTheme()
@@ -131,11 +133,11 @@ export default function HomeClient({ initialAuthenticated }: { initialAuthentica
         {mounted &&
           createPortal(
             <div
-              className="pointer-events-none fixed top-0 left-0 right-0 z-10 isolate h-40 transition-colors duration-500"
+              className="pointer-events-none fixed top-0 left-0 right-0 z-10 isolate h-24 transition-colors duration-500"
               style={{
                 background: light
-                  ? 'linear-gradient(to bottom, rgba(255, 255, 255, 0.7), transparent)'
-                  : 'linear-gradient(to bottom, rgba(0, 0, 0, 0.7), transparent)',
+                  ? 'linear-gradient(to bottom, rgba(255, 255, 255, 0.95), transparent)'
+                  : 'linear-gradient(to bottom, rgba(0, 0, 0, 0.95), transparent)',
                 backdropFilter: 'blur(60px)',
                 WebkitBackdropFilter: 'blur(60px)',
                 maskImage: 'linear-gradient(to bottom, black, transparent)',
@@ -197,6 +199,42 @@ export default function HomeClient({ initialAuthenticated }: { initialAuthentica
           className="flex flex-col gap-16 px-6 pt-56 pb-12 min-h-full text-left w-full"
           style={{ color: light ? '#000' : '#fff' }}
         >
+          <section
+            className="flex flex-col sm:flex-row sm:items-start justify-start gap-8 sm:gap-12 w-full"
+          >
+            <div className="sm:w-1/3 sm:min-w-[280px] shrink-0">
+              <h2 className="text-2xl font-medium tracking-normal mb-3">
+                This is me
+              </h2>
+              <p
+                className="text-sm opacity-80 leading-relaxed"
+                style={{ color: light ? '#333' : 'rgba(255,255,255,0.85)' }}
+              >
+                Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris.
+              </p>
+            </div>
+
+            <div className="@container flex-1 min-w-0">
+              <div className="grid grid-cols-1 gap-3 @[412px]:grid-cols-2 @[624px]:grid-cols-3">
+                <motion.div
+                  initial={{ opacity: 0, filter: 'blur(10px)', scale: 0.98 }}
+                  animate={{ opacity: 1, filter: 'blur(0px)', scale: 1 }}
+                  transition={{ type: 'spring', duration: 1.2, bounce: 0 }}
+                  className="col-span-1 @[412px]:col-span-2 relative overflow-hidden rounded-none aspect-[4/3]"
+                >
+                  <Image
+                    src="/this-is-me.png"
+                    alt=""
+                    fill
+                    quality={90}
+                    sizes="(max-width: 411px) 100vw, (max-width: 623px) 90vw, 600px"
+                    className="object-cover"
+                  />
+                </motion.div>
+              </div>
+            </div>
+          </section>
+
           {(['Section one', 'Section two', 'Section three'] as const).map((sectionTitle) => (
             <section
               key={sectionTitle}
@@ -226,7 +264,7 @@ export default function HomeClient({ initialAuthenticated }: { initialAuthentica
                       initial={{ opacity: 0, filter: 'blur(10px)', scale: 0.92 }}
                       animate={{ opacity: 1, filter: 'blur(0px)', scale: 1 }}
                       transition={{ type: 'spring', duration: 1.2, bounce: 0, delay: i * 0.1 }}
-className={`flex-1 min-w-0 min-h-[300px] rounded-xl p-6 border ${light ? 'border-black/[0.08] hover:border-black/[0.28]' : 'border-white/[0.1] hover:border-white/[0.28]'}`}
+className={`flex-1 min-w-0 min-h-[300px] rounded-none p-6 border ${light ? 'border-black/[0.08] hover:border-black/[0.28]' : 'border-white/[0.1] hover:border-white/[0.28]'}`}
                 style={{
                   background: light ? 'rgba(255, 255, 255, 1)' : 'rgba(0, 0, 0, 1)',
                 }}
@@ -251,7 +289,7 @@ className={`flex-1 min-w-0 min-h-[300px] rounded-xl p-6 border ${light ? 'border
 
   return (
     <main
-      className="relative h-[100dvh] min-h-screen w-screen overflow-hidden transition-colors duration-500"
+      className="relative h-[100dvh] min-h-[100dvh] w-screen overflow-hidden transition-colors duration-500"
       style={{ background: light ? '#fff' : '#000' }}
     >
       <Background theme={light ? 1 : 0} pillHovered={pillHovered} springX={springX} springY={springY} />
@@ -290,8 +328,21 @@ className={`flex-1 min-w-0 min-h-[300px] rounded-xl p-6 border ${light ? 'border
       </button>
 
       <div className="pointer-events-none relative z-10 flex h-full flex-col items-center justify-center gap-8">
+        <motion.div
+          initial={{ opacity: 0, filter: 'blur(10px)' }}
+          animate={{ opacity: 1, filter: 'blur(0px)' }}
+          transition={{ type: 'spring', duration: 1.2, bounce: 0, delay: INTRO_INITIAL_DELAY }}
+          style={{ x: springX, y: springY }}
+        >
+          <img
+            src="/favicon.svg"
+            alt=""
+            className="h-8 w-8 mb-2"
+            style={light ? { filter: 'invert(1)' } : undefined}
+          />
+        </motion.div>
         <motion.h1
-          className="flex select-none flex-col items-center gap-1 text-2xl font-medium tracking-normal transition-colors duration-500 md:flex-row md:gap-3 md:text-xl"
+          className="flex select-none flex-col items-center gap-1 font-medium tracking-normal transition-colors duration-500 md:flex-row md:gap-3 text-xl"
           style={{
             x: springX,
             y: springY,
@@ -304,7 +355,7 @@ className={`flex-1 min-w-0 min-h-[300px] rounded-xl p-6 border ${light ? 'border
                 key={`craig-${i}`}
                 initial={{ opacity: 0, filter: 'blur(10px)' }}
                 animate={{ opacity: 1, filter: 'blur(0px)' }}
-                transition={{ type: 'spring', duration: 1.2, bounce: 0, delay: i * 0.04 }}
+                transition={{ type: 'spring', duration: 1.2, bounce: 0, delay: INTRO_INITIAL_DELAY + 0.6 + i * 0.04 }}
               >
                 {char}
               </motion.span>
@@ -316,7 +367,7 @@ className={`flex-1 min-w-0 min-h-[300px] rounded-xl p-6 border ${light ? 'border
                 key={`design-${i}`}
                 initial={{ opacity: 0, filter: 'blur(10px)' }}
                 animate={{ opacity: 0.75, filter: 'blur(0px)' }}
-                transition={{ type: 'spring', duration: 1.2, bounce: 0, delay: 0.5 + i * 0.04 }}
+                transition={{ type: 'spring', duration: 1.2, bounce: 0, delay: INTRO_INITIAL_DELAY + 1.1 + i * 0.04 }}
               >
                 {char}
               </motion.span>
@@ -411,7 +462,7 @@ className={`flex-1 min-w-0 min-h-[300px] rounded-xl p-6 border ${light ? 'border
                 className="flex shrink-0"
                 initial={pillReturning ? false : { opacity: 0, filter: 'blur(10px)' }}
                 animate={{ opacity: 1, filter: 'blur(0px)' }}
-                transition={{ type: 'spring', duration: 1.2, bounce: 0, delay: pillReturning ? 0 : 2.75 }}
+                transition={{ type: 'spring', duration: 1.2, bounce: 0, delay: pillReturning ? 0 : INTRO_INITIAL_DELAY + 2.0 }}
               >
                 <svg
                   width="18"
@@ -433,7 +484,7 @@ className={`flex-1 min-w-0 min-h-[300px] rounded-xl p-6 border ${light ? 'border
                     key={`pwd-${i}`}
                     initial={pillReturning ? false : { opacity: 0, filter: 'blur(10px)' }}
                     animate={{ opacity: 1, filter: 'blur(0px)' }}
-                    transition={{ type: 'spring', duration: 1.2, bounce: 0, delay: pillReturning ? 0 : 2.75 + (i + 1) * 0.04 }}
+                    transition={{ type: 'spring', duration: 1.2, bounce: 0, delay: pillReturning ? 0 : INTRO_INITIAL_DELAY + 2.0 + (i + 1) * 0.04 }}
                   >
                     {char === ' ' ? '\u00A0' : char}
                   </motion.span>
