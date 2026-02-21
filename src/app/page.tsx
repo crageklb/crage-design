@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useLayoutEffect, useState, useRef } from 'react'
 import { motion, useMotionValue, useSpring, AnimatePresence } from 'framer-motion'
 import dynamic from 'next/dynamic'
 import { useTheme } from '@/components/ThemeProvider'
@@ -34,12 +34,26 @@ export default function Home() {
     return () => clearTimeout(t)
   }, [])
 
-  useEffect(() => {
-    if (inputActive) {
-      const t = setTimeout(() => {
-        inputRef.current?.focus({ preventScroll: true })
-      }, 160)
-      return () => clearTimeout(t)
+  useLayoutEffect(() => {
+    if (!inputActive) return
+    const tryFocus = () => {
+      const el = inputRef.current
+      if (el) {
+        el.focus({ preventScroll: true })
+        document.querySelectorAll('[data-ios-focus-helper]').forEach((n) => n.remove())
+        return true
+      }
+      return false
+    }
+    if (!tryFocus()) {
+      let timeoutId: ReturnType<typeof setTimeout> | undefined
+      const rafId = requestAnimationFrame(() => {
+        if (!tryFocus()) timeoutId = setTimeout(tryFocus, 180)
+      })
+      return () => {
+        cancelAnimationFrame(rafId)
+        if (timeoutId !== undefined) clearTimeout(timeoutId)
+      }
     }
   }, [inputActive])
 
@@ -86,7 +100,8 @@ export default function Home() {
   }, [x, y])
 
   const handleSubmit = async () => {
-    const valid = await validatePassword(password)
+    const value = (inputRef.current?.value ?? password).trim()
+    const valid = await validatePassword(value)
     if (valid) {
       setAuthenticated(true)
     } else {
@@ -99,7 +114,7 @@ export default function Home() {
   if (authenticated) {
     return (
       <main
-        className="relative h-screen w-screen overflow-hidden transition-colors duration-500"
+        className="relative h-[100dvh] min-h-screen w-screen overflow-hidden transition-colors duration-500"
         style={{ background: light ? '#fff' : '#000' }}
       >
         <button
@@ -140,7 +155,7 @@ export default function Home() {
 
   return (
     <main
-      className="relative h-screen w-screen overflow-hidden transition-colors duration-500"
+      className="relative h-[100dvh] min-h-screen w-screen overflow-hidden transition-colors duration-500"
       style={{ background: light ? '#fff' : '#000' }}
     >
       <Background theme={light ? 1 : 0} pillHovered={pillHovered} springX={springX} springY={springY} />
@@ -247,6 +262,8 @@ export default function Home() {
               <motion.input
                 ref={inputRef}
                 type="password"
+                enterKeyHint="go"
+                autoComplete="off"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
@@ -267,7 +284,23 @@ export default function Home() {
               className={`flex cursor-pointer items-center justify-center gap-2 rounded-full border border-transparent px-4 py-2 transition-none ${passwordHoverReady ? 'pointer-events-auto' : 'pointer-events-none'} ${light ? 'hover:bg-black/10' : 'hover:bg-white/10'}`}
               onMouseEnter={() => setPillHovered(true)}
               onMouseLeave={() => setPillHovered(false)}
-              onClick={() => setInputActive(true)}
+              onPointerDown={(e) => {
+                if (inputActive) return
+                if (e.pointerType === 'mouse' && e.button !== 0) return
+                const fake = document.createElement('input')
+                fake.type = 'text'
+                fake.setAttribute('data-ios-focus-helper', '')
+                Object.assign(fake.style, {
+                  position: 'absolute',
+                  opacity: '0',
+                  height: '0',
+                  fontSize: '16px',
+                  pointerEvents: 'none',
+                })
+                document.body.prepend(fake)
+                fake.focus()
+                setInputActive(true)
+              }}
               initial={pillReturning ? false : { opacity: 0 }}
               animate={{ opacity: 0.5 }}
               exit={{ opacity: 0 }}

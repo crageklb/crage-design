@@ -11,6 +11,9 @@ const ThemeContext = createContext<{
   setLight: (value: boolean | ((prev: boolean) => boolean)) => void
 } | null>(null)
 
+const BG_DARK = '#000000'
+const BG_LIGHT = '#ffffff'
+
 export function ThemeProvider({
   children,
   initialTheme,
@@ -28,6 +31,14 @@ export function ThemeProvider({
       document.cookie = `${THEME_KEY}=${stored}; path=/; max-age=31536000`
     }
   }, [])
+
+  useEffect(() => {
+    const bg = light ? BG_LIGHT : BG_DARK
+    document.documentElement.style.backgroundColor = bg
+    document.body.style.backgroundColor = bg
+    const meta = document.querySelector('meta[name="theme-color"]')
+    if (meta) meta.setAttribute('content', bg)
+  }, [light])
 
   const setLight = useCallback((value: boolean | ((prev: boolean) => boolean)) => {
     setLightState(prev => {
