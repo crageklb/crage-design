@@ -30,6 +30,10 @@ const fragmentShader = /* glsl */ `
   uniform vec2 uShockOrigins[MAX_WAVES];
   uniform float uShockTimes[MAX_WAVES];
 
+  uniform vec2 uPillCenter;
+  uniform vec2 uPillRadius;
+  uniform float uPillHovered;
+
   varying vec2 vUv;
 
   float hash21(vec2 p) {
@@ -38,8 +42,7 @@ const fragmentShader = /* glsl */ `
     return fract(p.x * p.y);
   }
 
-  void main() {
-    vec2 uv = vUv;
+  vec3 computeColor(vec2 uv) {
     float aspect = uResolution.x / uResolution.y;
     vec2 scaled = vec2(uv.x * aspect, uv.y);
     vec2 mScaled = vec2(uMouse.x * aspect, uMouse.y);
@@ -64,7 +67,7 @@ const fragmentShader = /* glsl */ `
     // Fluid trail: displacement + illumination (continuous segments, not just circles)
     float trailGlow = 0.0;
     float radius = 0.08;
-    float glowRadius = 0.12;
+    float glowRadius = 0.02 + speedInflation * 0.2;
 
     for (int i = 0; i < TRAIL_LEN; i++) {
       float age = uTime - uTrailTimes[i];
@@ -83,8 +86,9 @@ const fragmentShader = /* glsl */ `
       float tFall = smoothstep(tRadius, 0.0, tDist);
       offset += normalize(tDelta + 0.0001) * tFall * tDecay * 0.32;
 
-      float gFall = smoothstep(tGlowRadius, 0.0, tDist);
-      trailGlow += gFall * tDecay;
+      float gT = clamp(tDist / (tGlowRadius * 3.0), 0.0, 1.0);
+      float gFall = 0.5 + 0.5 * cos(gT * 3.14159265);
+      trailGlow = max(trailGlow, gFall * tDecay);
 
       // Segment: bridge to next point in path (older = i-1, wrap). Skip wrap from oldest→newest.
       int head = int(uTrailHead);
@@ -110,12 +114,13 @@ const fragmentShader = /* glsl */ `
           float segFall = smoothstep(segRadius, 0.0, segDist);
           offset += normalize(cellWorld - closest + 0.0001) * segFall * segDecay * 0.32;
 
-          float segGlow = smoothstep(segGlowRadius, 0.0, segDist);
-          trailGlow += segGlow * segDecay;
+          float sgT = clamp(segDist / (segGlowRadius * 3.0), 0.0, 1.0);
+          float segGlow = 0.5 + 0.5 * cos(sgT * 3.14159265);
+          trailGlow = max(trailGlow, segGlow * segDecay);
         }
       }
     }
-    trailGlow = min(trailGlow, 1.0);
+    trailGlow = clamp(trailGlow, 0.0, 1.0);
 
     // Stacking shockwaves
     float shockColor = 0.0;
@@ -141,32 +146,32 @@ const fragmentShader = /* glsl */ `
     offset = clamp(offset, vec2(-0.38), vec2(0.38));
     float d = length(cell - offset);
 
-    float mInfl = smoothstep(0.24 + speedInflation * 0.26, 0.0, dist);
+    float mInfl = smoothstep(0.24, 0.0, dist);
     float baseRadius = 0.032 + mInfl * 0.04;
     float soft = 0.024;
     float dotMask = smoothstep(baseRadius + soft, baseRadius - soft, d);
 
-    // In light mode, fade dot visibility based on cursor/trail/shock proximity
+    // In light mode, fade dot visibility by cursor/trail/shock proximity. Dark mode always full.
     float visibility = mix(1.0, mInfl + trailGlow * 0.8 + shockColor * 1.0, uTheme);
     visibility = clamp(visibility, 0.0, 1.0);
     float visMask = dotMask * visibility;
 
     // Theme-aware colors
-    float bright = 0.10 + mInfl * (0.22 + speedInflation * 0.04) + trailGlow * 0.20;
+    float bright = 0.10 + mInfl * 0.22;
 
     vec3 bg = mix(vec3(0.0), vec3(1.0), uTheme);
-    vec3 dotBase = mix(vec3(1.0), vec3(0.25), uTheme);
+    vec3 dotBase = mix(vec3(1.0), vec3(0.16), uTheme);
 
     vec3 dotColor = dotBase * bright;
     vec3 warmTint = dotColor * mix(vec3(1.4, 0.7, 0.4), vec3(0.5, 0.7, 1.2), uTheme);
     float cursorNearGradient = 1.0 - smoothstep(0.12, 0.5, uMouse.y);
-    vec3 litDot = mix(dotColor, warmTint, max(cursorNearGradient, trailGlow * 0.6));
+    vec3 litDot = mix(dotColor, warmTint, max(cursorNearGradient, trailGlow * 0.25));
 
     vec3 col = mix(bg, litDot, visMask);
 
     // Trail illumination — bright but fades with trail decay
-    vec3 trailTintDark = vec3(0.85, 0.5, 0.25) * trailGlow * visMask * 2.2;
-    vec3 trailTintLight = vec3(0.15, 0.35, 0.7) * trailGlow * visMask * 1.2;
+    vec3 trailTintDark = vec3(0.85, 0.5, 0.25) * trailGlow * visMask * 0.5;
+    vec3 trailTintLight = vec3(0.15, 0.35, 0.7) * trailGlow * visMask * 0.3;
     col += trailTintDark * (1.0 - uTheme);
     col -= trailTintLight * uTheme;
 
@@ -182,18 +187,49 @@ const fragmentShader = /* glsl */ `
 
     col = mix(bg, col, uTouchActive);
 
-    // Soft radial gradient peeking from bottom — slides up on load
+    // Soft radial gradient that slowly drifts around the screen
     float gradAnim = smoothstep(0.0, 1.2, uTime);
-    float centerY = mix(-1.4, -0.25, gradAnim);
-    vec2 gradientCenter = vec2(0.5, centerY);
+    float slowT = uTime * 0.08;
+    vec2 gradientCenter = vec2(
+      0.5 + sin(slowT * 1.0) * 0.28 + sin(slowT * 0.61) * 0.14,
+      0.5 + cos(slowT * 0.77) * 0.28 + cos(slowT * 1.13) * 0.12
+    );
     float r = length(uv - gradientCenter);
-    float gradient = smoothstep(0.85, 0.2, r) * smoothstep(0.5, 0.0, uv.y) * gradAnim;
-    vec3 darkGrad = vec3(0.14, 0.07, 0.04) * gradient;
-    vec3 lightGrad = vec3(0.07, 0.04, 0.0) * gradient;
+    float gradient = smoothstep(0.85, 0.1, r) * gradAnim;
+    vec3 darkGrad = vec3(0.07, 0.035, 0.02) * gradient;
     col += darkGrad * (1.0 - uTheme);
-    col -= lightGrad * uTheme;
 
-    gl_FragColor = vec4(col + grain, 1.0);
+    return col + grain;
+  }
+
+  void main() {
+    vec2 uv = vUv;
+    float aspect = uResolution.x / uResolution.y;
+
+    vec3 col;
+    if (uPillHovered > 0.5) {
+      vec2 d = (uv - uPillCenter) / uPillRadius;
+      float pillDist = length(d);
+      if (pillDist < 1.0) {
+        float blurStep = 0.008;
+        col = vec3(0.0);
+        float total = 0.0;
+        for (int dy = -2; dy <= 2; dy++) {
+          for (int dx = -2; dx <= 2; dx++) {
+            vec2 offset = vec2(float(dx), float(dy)) * blurStep;
+            col += computeColor(uv + offset);
+            total += 1.0;
+          }
+        }
+        col /= total;
+      } else {
+        col = computeColor(uv);
+      }
+    } else {
+      col = computeColor(uv);
+    }
+
+    gl_FragColor = vec4(col, 1.0);
   }
 `
 
@@ -210,6 +246,9 @@ const DotGridMaterial = shaderMaterial(
     uTrailHead: 0,
     uShockOrigins: Array.from({ length: 16 }, () => new THREE.Vector2(0, 0)),
     uShockTimes: new Float32Array(16).fill(-10),
+    uPillCenter: new THREE.Vector2(0.5, 0.5),
+    uPillRadius: new THREE.Vector2(0.055, 0.025),
+    uPillHovered: 0,
   },
   vertexShader,
   fragmentShader,

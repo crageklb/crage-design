@@ -1,5 +1,6 @@
 'use client'
 
+import type { MotionValue } from 'framer-motion'
 import { useRef, useEffect, useMemo } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
@@ -10,7 +11,17 @@ const TRAIL_INTERVAL = 0.03
 const TRAIL_MIN_DIST = 0.015
 const MOBILE_BREAKPOINT = 768
 
-function DotGrid({ theme }: { theme: number }) {
+function DotGrid({
+  theme,
+  pillHovered,
+  springX,
+  springY,
+}: {
+  theme: number
+  pillHovered: boolean
+  springX: MotionValue<number>
+  springY: MotionValue<number>
+}) {
   const { viewport, size } = useThree()
   const mouse = useRef(new THREE.Vector2(0.5, 0.5))
   const waveIndex = useRef(0)
@@ -50,7 +61,7 @@ function DotGrid({ theme }: { theme: number }) {
   }, [])
 
   useEffect(() => {
-    const onMove = (e: PointerEvent) => {
+    const updateMouse = (e: PointerEvent) => {
       mouse.current.set(
         e.clientX / window.innerWidth,
         1 - e.clientY / window.innerHeight,
@@ -58,6 +69,7 @@ function DotGrid({ theme }: { theme: number }) {
     }
 
     const onClick = (e: MouseEvent) => {
+      if ((e.target as HTMLElement).closest('[data-no-shockwave]')) return
       const u = material.uniforms as Record<string, THREE.IUniform>
       const i = waveIndex.current % MAX_WAVES
       u.uShockOrigins.value[i].set(
@@ -68,10 +80,15 @@ function DotGrid({ theme }: { theme: number }) {
       waveIndex.current++
     }
 
-    window.addEventListener('pointermove', onMove, { passive: true })
+    const opts = { passive: true, capture: true }
+    document.addEventListener('pointermove', updateMouse, opts)
+    document.addEventListener('pointerover', updateMouse, opts)
+    document.addEventListener('pointerdown', updateMouse, opts)
     window.addEventListener('click', onClick)
     return () => {
-      window.removeEventListener('pointermove', onMove)
+      document.removeEventListener('pointermove', updateMouse, opts)
+      document.removeEventListener('pointerover', updateMouse, opts)
+      document.removeEventListener('pointerdown', updateMouse, opts)
       window.removeEventListener('click', onClick)
     }
   }, [material])
@@ -87,6 +104,11 @@ function DotGrid({ theme }: { theme: number }) {
     u.uTouchActive.value = isMobile ? Math.max(touchActive.current ? 1 : 0, initialFade) : 1
     u.uResolution.value.set(size.width, size.height)
     u.uMouse.value.copy(mouse.current)
+    u.uPillHovered.value = pillHovered ? 1 : 0
+    u.uPillCenter.value.set(
+      0.5 + springX.get() / size.width,
+      0.47 - springY.get() / size.height,
+    )
 
     if (!hasInit.current && t > 0.3) {
       const i = waveIndex.current % MAX_WAVES
@@ -131,7 +153,17 @@ function DotGrid({ theme }: { theme: number }) {
   )
 }
 
-export default function Background({ theme = 0 }: { theme?: number }) {
+export default function Background({
+  theme = 0,
+  pillHovered = false,
+  springX,
+  springY,
+}: {
+  theme?: number
+  pillHovered?: boolean
+  springX?: MotionValue<number>
+  springY?: MotionValue<number>
+}) {
   return (
     <div className="fixed inset-0 z-0" aria-hidden="true">
       <Canvas
@@ -139,7 +171,12 @@ export default function Background({ theme = 0 }: { theme?: number }) {
         dpr={[1, 1.5]}
         camera={{ position: [0, 0, 1] }}
       >
-        <DotGrid theme={theme} />
+        <DotGrid
+          theme={theme}
+          pillHovered={pillHovered}
+          springX={springX ?? { get: () => 0 } as MotionValue<number>}
+          springY={springY ?? { get: () => 0 } as MotionValue<number>}
+        />
       </Canvas>
     </div>
   )
